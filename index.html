@@ -578,7 +578,7 @@
         .in-game-tutorial { display: none !important; }
 
     </style>
-    <!-- CrazyGames: no cordova -->
+    <script src="cordova.js"></script>
 </head>
 <body>
 
@@ -873,7 +873,6 @@ window.onerror = function(message, source, lineno, colno, error) {
 // Replace the zone IDs below with your real ones from Adsterra dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 const AdManager = {
-    // CrazyGames build — ads removed, all methods are no-ops
     init: function() {},
     showInterstitial: function(cb) { if (cb) cb(); },
     showRewarded: function(onReward, onFail) { if (onReward) onReward(); },
@@ -2663,7 +2662,7 @@ class Game {
         
         this.activeMode = 'endless'; this.activeLevel = 0; this.timeLeft = 0; this.levelCompleted = false; this.manualDrive = false; 
         this.currentLanes = [-6, -2, 2, 6]; this.highestLevel = 1; this.totalGold = 0;
-        this.unlockedCars = [true, ...Array(19).fill(false)]; // First car free
+        this.unlockedCars = [true, ...Array(19).fill(false)]; // Only first car free
         this.unlockedWorlds = [true, ...Array(9).fill(false)];
         this.bestScore = 0; this.lastRewardDate = ''; this.rewardStreak = 0;
         
@@ -3064,7 +3063,7 @@ class Game {
                 this.unlockedCars[0] = true;
                 if(data.cars.length < CAR_DB.length) { this.unlockedCars.push(...Array(CAR_DB.length - data.cars.length).fill(false)); }
             }
-            // Cars locked by default, unlocked via in-game gold
+            // Cars locked by default — unlocked via gold
             // Restore worlds only if valid save exists — don't wipe with default
             if(data.worlds && data.worlds.length === WORLD_DB.length) { this.unlockedWorlds = data.worlds; }
             this.bestScore = data.bestScore || 0;
