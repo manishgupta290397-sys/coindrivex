@@ -6,6 +6,65 @@
     <title>Coin DriveX: Ultimate Heist</title>
     <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5298797937177998" crossorigin="anonymous"></script>
+    <!-- Start.io Web SDK -->
+    <script>
+    window.StartioAd = {
+        publisherId: '173505127',
+        appId: '201882843',
+        _ready: false,
+        _pendingCb: null,
+
+        init: function() {
+            var s = document.createElement('script');
+            s.src = 'https://sdk.start.io/startio-web-sdk.js';
+            s.async = true;
+            s.onload = function() {
+                if (window.startio) {
+                    window.startio.init({
+                        publisherId: '173505127',
+                        appId: '201882843'
+                    });
+                    StartioAd._ready = true;
+                    console.log('[Start.io] SDK ready');
+                    if (StartioAd._pendingCb) { StartioAd._pendingCb(); StartioAd._pendingCb = null; }
+                }
+            };
+            s.onerror = function() { console.warn('[Start.io] SDK failed to load'); };
+            document.head.appendChild(s);
+        },
+
+        // Call this to show an interstitial ad
+        // onComplete fires when ad closes or if no ad available
+        showInterstitial: function(onComplete) {
+            if (!this._ready || !window.startio) {
+                if (onComplete) onComplete();
+                return;
+            }
+            try {
+                window.startio.showInterstitial({
+                    onAdClosed: function() { if (onComplete) onComplete(); },
+                    onAdFailed: function() { if (onComplete) onComplete(); }
+                });
+            } catch(e) {
+                console.warn('[Start.io] showInterstitial error:', e);
+                if (onComplete) onComplete();
+            }
+        }
+    };
+
+    // Hook into AdManager so existing game ad triggers use Start.io
+    window.addEventListener('load', function() {
+        StartioAd.init();
+
+        // Override AdManager interstitial to also show Start.io ad
+        var _origInterstitial = AdManager.showInterstitial.bind(AdManager);
+        AdManager.showInterstitial = function(cb) {
+            StartioAd.showInterstitial(function() {
+                _origInterstitial(cb);
+            });
+        };
+    });
+    </script>
     
     <!-- Try local THREE (APK/Cordova), fall back to CDN (GitHub Pages) -->
     <script>
