@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Coin DriveX: Ultimate Heist</title>
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5298797937177998" crossorigin="anonymous"></script>
     
-    <!-- POKI/CRAZYGAMES REQUIREMENT: Local file loading or CDN -->
-    <!-- Poki SDK -->
-    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
     <!-- Try local THREE (APK/Cordova), fall back to CDN (GitHub Pages) -->
     <script>
     (function() {
@@ -2745,12 +2744,11 @@ window.onerror = function(message, source, lineno, colno, error) {
     return false; // prevent default browser error UI, but errors are now logged
 };
 
-// Suppress unhandled promise rejections from Poki SDK fetch calls and network failures
-// These are expected when the device has no internet or Poki blocks the request
+// Suppress unhandled promise rejections from network failures
 window.addEventListener('unhandledrejection', function(e) {
     const msg = (e && e.reason && e.reason.message) ? e.reason.message : String(e.reason || '');
     if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('AbortError') || msg.includes('Load failed')) {
-        e.preventDefault(); // Don't log to console
+        e.preventDefault();
     }
 });
 
@@ -2785,14 +2783,17 @@ window.addEventListener('unhandledrejection', function(e) {
     }, { capture: false });
 })();
 
-// --- AD MANAGER (Adsterra) ---------------------------------------------------
-// Adsterra uses a JavaScript SDK loaded via script tag.
-// Interstitials = Adsterra "Popunder" or "Interstitial" zone
-// Rewarded = Adsterra "Direct Link" opened in a timed overlay
-// Replace the zone IDs below with your real ones from Adsterra dashboard.
+// --- AD MANAGER (AdMob via Kodular native bridge) ----------------------------
+// Ads are handled natively by Kodular's AdMob components.
+// Google AdMob TEST IDs (replace with real ones from admob.google.com):
+//   App ID:       ca-app-pub-3940256099942544~3347511713
+//   Banner:       ca-app-pub-3940256099942544/6300978111
+//   Interstitial: ca-app-pub-3940256099942544/1033173712
+//   Rewarded:     ca-app-pub-3940256099942544/5224354917
+// Kodular calls window.AdManager._onInterstitialClosed() / _onRewardedClosed(earned)
+// when ads finish. Set this up in Kodular Blocks.
 // -----------------------------------------------------------------------------
 const AdManager = {
-    _adOverlay: null,
     _inputBlocker: null,
 
     init: function() {
@@ -2875,61 +2876,54 @@ const AdManager = {
         this._wasEnabled = false;
     },
 
-    // BUG FIX 2 helper -- call after every ad break when game was actively playing.
-    // Poki SDK requires gameplayStart() to follow every commercialBreak() or
-    // rewardedBreak() that interrupted active gameplay; omitting it desynchronises
-    // the SDK's session tracking and suppresses subsequent ad requests.
-    // GUARD: _pokiSessionActive MUST be checked — calling gameplayStart() outside
-    // an active session breaks the Poki SDK ad-flow state machine.
-    // Do NOT remove the _pokiSessionActive condition below.
     _resumeGameplayIfPlaying: function() {
-        if (typeof PokiSDK === 'undefined') return;
-        const g = window.game;
-        // _pokiSessionActive guard is intentional and required — see comment above.
-        if (g && g.isPlaying && !g.isPaused && !g.levelCompleted && g._pokiSessionActive) {
-            PokiSDK.gameplayStart();
-        }
+        // No-op: Poki session tracking removed. AdMob has no equivalent requirement.
     },
 
     // -- Commercial Break (interstitial -- no reward) --------------------------
     showInterstitial: function(cb) {
-        if (typeof PokiSDK === 'undefined') { if (cb) cb(); return; }
         this._blockInput();
         this._muteForAd();
-        PokiSDK.commercialBreak()
-            .then(() => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (cb) cb();
-            })
-            .catch(() => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (cb) cb();
-            });
+        if (typeof Android !== 'undefined' && typeof Android.showInterstitialAd === 'function') {
+            this._interstitialCb = cb;
+            Android.showInterstitialAd();
+        } else {
+            this._unblockInput();
+            this._restoreAudio();
+            if (cb) cb();
+        }
+    },
+
+    // Called by Kodular Blocks after interstitial closes
+    _onInterstitialClosed: function() {
+        this._unblockInput();
+        this._restoreAudio();
+        if (this._interstitialCb) { this._interstitialCb(); this._interstitialCb = null; }
     },
 
     // -- Rewarded Break (opt-in, user earns a reward) -------------------------
     showRewarded: function(onReward, onFail) {
-        if (typeof PokiSDK === 'undefined') { if (onReward) onReward(); return; }
         this._blockInput();
         this._muteForAd();
-        PokiSDK.rewardedBreak()
-            .then(withReward => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (withReward && onReward) onReward();
-                else if (!withReward && onFail) onFail();
-            })
-            .catch(() => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (onFail) onFail();
-            });
+        if (typeof Android !== 'undefined' && typeof Android.showRewardedAd === 'function') {
+            this._rewardedCb = onReward;
+            this._rewardedFailCb = onFail;
+            Android.showRewardedAd();
+        } else {
+            this._unblockInput();
+            this._restoreAudio();
+            if (onReward) onReward();
+        }
+    },
+
+    // Called by Kodular Blocks after rewarded ad — earned=true if user watched fully
+    _onRewardedClosed: function(earned) {
+        this._unblockInput();
+        this._restoreAudio();
+        if (earned && this._rewardedCb) this._rewardedCb();
+        else if (!earned && this._rewardedFailCb) this._rewardedFailCb();
+        this._rewardedCb = null;
+        this._rewardedFailCb = null;
     },
 
     // -- Rewarded 2x (alias -- same flow) -------------------------------------
@@ -2939,22 +2933,7 @@ const AdManager = {
 
     // -- Rewarded Interstitial (level win -- shows ad, no explicit reward cb) --
     showRewardedInterstitial: function(cb) {
-        if (typeof PokiSDK === 'undefined') { if (cb) cb(); return; }
-        this._blockInput();
-        this._muteForAd();
-        PokiSDK.commercialBreak()
-            .then(() => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (cb) cb();
-            })
-            .catch(() => {
-                this._unblockInput();
-                this._restoreAudio();
-                this._resumeGameplayIfPlaying(); // FIX 2
-                if (cb) cb();
-            });
+        this.showInterstitial(cb);
     },
 
     // -- Revive Ad (rewarded -- grants a revive on success) --------------------
@@ -9341,13 +9320,6 @@ class Game {
         this.isPlaying = true;
         this.isPaused = false;
         this._initCopGuidance();  // reset cop guidance state each run
-        // Poki SDK: start a session if one isn't already active.
-        // The session runs continuously through retries, died screen, cinematic etc.
-        // It only stops when the player returns to menu (and only after run 5+).
-        if (typeof PokiSDK !== 'undefined' && !this._pokiSessionActive) {
-            PokiSDK.gameplayStart();
-            this._pokiSessionActive = true;
-        }
         // Show autopilot HUD
         this._updateAutopilotHUD();
         // First-time autopilot tutorial at score 50 (handled in checkEvents)
@@ -9434,10 +9406,6 @@ class Game {
         const _at = document.getElementById('autopilot-tutorial');
         if (_at) _at.classList.remove('active');
         const _apcdmenu = document.getElementById('autopilot-countdown'); if (_apcdmenu) { _apcdmenu.classList.remove('active'); _apcdmenu.innerText = ''; }
-        if (typeof PokiSDK !== 'undefined' && this._pokiSessionActive && this.totalRuns >= 5) {
-            PokiSDK.gameplayStop();
-            this._pokiSessionActive = false;
-        }
         this.audio.stopEngineVroom(); // stop multiplayer engine vroom
         this.audio.playClick(); this.audio.startMusic('menu');
         // Cancel any running ghost replay (3D cinematic or RAF)
@@ -10358,8 +10326,6 @@ class Game {
         // Reset all button press state — clears the _trackId closure so buttons
         // aren't permanently locked if a finger was held at the moment of death.
         if (this.input) this.input.resetButtons();
-        // Tell Poki gameplay resumed after the rewarded ad break (only if session active)
-        if (typeof PokiSDK !== 'undefined' && this._pokiSessionActive) PokiSDK.gameplayStart();
         
         this.entities.forEach(e => {
             if(Math.abs(e.mesh.position.z - this.player.mesh.position.z) < 30) { e.markedForDeletion = true; this.disposeEntity(e); }
@@ -12217,7 +12183,6 @@ window.onload = () => {
                 game = new Game();
                 window.game = game;
                 window.LoadTracker.done('ENGINE: Initializing');
-                if (typeof PokiSDK !== 'undefined') PokiSDK.gameLoadingFinished();
                 // All hard assets done -- tell tracker the game is fully ready
                 window.LoadTracker.gameInitDone();
             } catch(e) {
@@ -12236,13 +12201,8 @@ window.onload = () => {
         const doBoot = () => {
             if (booted) return;
             booted = true;
-            if (typeof PokiSDK !== 'undefined') {
-                PokiSDK.init()
-                    .then(() => { console.log('[Poki] SDK ready'); AdManager.init(); _startGame(); })
-                    .catch(() => { console.warn('[Poki] init failed, starting anyway'); AdManager.init(); _startGame(); });
-            } else {
-                _startGame();
-            }
+            AdManager.init();
+            _startGame();
         };
 
         // Boot immediately -- car GLBs are not required for loading screen
